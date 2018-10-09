@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/zxfonline/golog"
 )
 
 var (
@@ -36,7 +37,7 @@ type ReturnToClient struct {
 }
 
 // MsgCallback 消息处理函数
-type MsgCallback func(msg *Message) []*ReturnToClient
+type MsgCallback func(msg *Message, logger *golog.Logger) []*ReturnToClient
 
 // EventCallback 时间处理
 type EventCallback func(ctx context.Context, event *Event)
