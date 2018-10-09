@@ -9,6 +9,7 @@ import (
 	"github.com/zxfonline/expvar"
 
 	"github.com/zxfonline/golog"
+	"github.com/zxfonline/timefix"
 
 	"github.com/zxfonline/chanutil"
 	"github.com/zxfonline/trace"
@@ -34,12 +35,14 @@ type Processor struct {
 }
 
 // NewProcessor 新建处理器，包含初始化操作
-func NewProcessor(logger *golog.Logger, addEvent EventCallback) IProcessor {
-	return NewProcessorWithLoopTime(logger, addEvent, 24*time.Hour)
+func NewProcessor(logger *golog.Logger) IProcessor {
+	now := timefix.CurrentTime()
+	nextTime := timefix.NextMidnight(now, 1)
+	return NewProcessorWithLoopTime(logger, nextTime.Sub(now))
 }
 
 // NewProcessorWithLoopTime 指定定时器
-func NewProcessorWithLoopTime(logger *golog.Logger, addEvent EventCallback, time time.Duration) IProcessor {
+func NewProcessorWithLoopTime(logger *golog.Logger, time time.Duration) IProcessor {
 	p := &Processor{
 		messageChan:   make(chan *Message, 10000),
 		eventChan:     make(chan *Event, 10000),
@@ -49,9 +52,6 @@ func NewProcessorWithLoopTime(logger *golog.Logger, addEvent EventCallback, time
 		loopTime:      time,
 		done:          chanutil.NewDoneChan(),
 		Logger:        logger,
-	}
-	if addEvent != nil {
-		p.AddEventCallback(AddEvent, addEvent)
 	}
 	return p
 }
@@ -159,9 +159,9 @@ func (p *Processor) ProcMessage(msg *Message) {
 	var rets []*ReturnToClient
 	if cb, ok := p.callbackMap[msg.Head.ID]; ok {
 		//消息回执列表返回给默认连接
-		rets = cb(msg)
+		rets = cb(msg, p.Logger)
 	} else if p.unHandledHandler != nil {
-		rets = p.unHandledHandler(msg)
+		rets = p.unHandledHandler(msg, p.Logger)
 	} else {
 		p.Logger.Warnf("can't find callback(%d)", msg.Head.ID)
 	}
