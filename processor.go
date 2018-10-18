@@ -152,7 +152,7 @@ func (p *Processor) ProcMessage(msg *Message) {
 		}
 	}()
 	msgName := fmt.Sprintf("MsgID:%d", msg.Head.ID)
-	proxyTrace := trace.TraceStart("Processor.ProcMessage", msgName)
+	proxyTrace := trace.TraceStart("Processor", msgName, true)
 	defer trace.TraceFinishWithExpvar(proxyTrace, func(req *expvar.Map, time int64) {
 		req.AddMessage(msgName, 1, time)
 	})
@@ -198,7 +198,7 @@ func (p *Processor) StartProcess(ctx context.Context, wg *sync.WaitGroup, loopFu
 	}()
 	p.Logger.Infof("processor is starting.")
 
-	proxyTrace := trace.TraceStart("Goroutine", "Processor")
+	proxyTrace := trace.TraceStart("Goroutine", "Processor", false)
 	defer trace.TraceFinish(proxyTrace)
 	tick := time.Tick(p.loopTime)
 	for {
@@ -256,7 +256,7 @@ func RecoverEventCallback(p *Processor, ec EventCallback, ctx context.Context, e
 		}
 	}()
 	msgName := fmt.Sprintf("EventID:%d", event.ID)
-	proxyTrace := trace.TraceStart("Processor.EventCallback", msgName)
+	proxyTrace := trace.TraceStart("Processor", msgName, true)
 	defer trace.TraceFinishWithExpvar(proxyTrace, func(req *expvar.Map, time int64) {
 		req.AddMessage(msgName, 1, time)
 	})
