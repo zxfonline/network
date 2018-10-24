@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	DEFAULT_QUEUE_SIZE = 256
+	DEFAULT_QUEUE_SIZE = 512
 )
 
 type Sender struct {
