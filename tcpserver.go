@@ -20,13 +20,13 @@ type Server struct {
 	Logger *golog.Logger
 }
 
-// NewTCP4Server new tcp server
-func NewTCP4Server(logger *golog.Logger, bindAddress string) (*Server, error) {
+// NewTCPServer new tcp server
+func NewTCPServer(logger *golog.Logger, bindAddress string) (*Server, error) {
 	i := strings.Index(bindAddress, ":")
 	if i < 0 {
 		return nil, fmt.Errorf("Bad WanAddress: %s", bindAddress)
 	}
-	serverAddr, err := net.ResolveTCPAddr("tcp4", bindAddress[i:])
+	serverAddr, err := net.ResolveTCPAddr("tcp", bindAddress[i:])
 	if err != nil {
 		return nil, err
 	}
