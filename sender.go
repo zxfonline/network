@@ -28,7 +28,7 @@ func (s *Sender) Send(data []byte) bool {
 			s.Logger.Debugf("sender close: %p %s,add msg false.", s, s.conn.RemoteAddr())
 			return false
 		case s.pending <- data:
-			if wait := len(s.pending); wait > cap(s.pending)/10*6 && wait%10 == 0 {
+			if wait := len(s.pending); wait > cap(s.pending)/10*5 && wait%10 == 0 {
 				s.Logger.Warnf("sender send process,waitchan:%d/%d,remote %s.", wait, cap(s.pending), s.conn.RemoteAddr())
 			}
 			return true
@@ -38,7 +38,7 @@ func (s *Sender) Send(data []byte) bool {
 			return false
 		}
 	} else {
-		if wait := len(s.pending); wait > cap(s.pending)/10*6 && wait%10 == 0 {
+		if wait := len(s.pending); wait > cap(s.pending)/10*5 && wait%10 == 0 {
 			s.Logger.Warnf("sender send process,waitchan:%d/%d,remote %s.", wait, cap(s.pending), s.conn.RemoteAddr())
 		}
 		//阻塞发送，直到管道关闭

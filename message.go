@@ -15,16 +15,15 @@ var (
 )
 
 const (
-	//预估值
+	//MaxMessageLength 预估值
 	MaxMessageLength int32 = 1024 * 1024
-	//内部约定
+	//MaxMessageID 内部约定
 	MaxMessageID int32 = 100000
-	//消息头长度
+	//HEAD_SIZE 消息头长度
 	HEAD_SIZE = 8
 )
 
-// MessageHead the message head
-// length and id
+// MessageHead the message head length and id
 type MessageHead struct {
 	Length int32
 	ID     int32
@@ -38,9 +37,8 @@ func NewMessage(uid uint64, peer *ClientPeer, body []byte) *Message {
 	}
 	if len(body) > 0 {
 		return msg.Package(body)
-	} else {
-		return msg
 	}
+	return msg
 }
 
 func LogRecvMsg(msg *Message, s proto.Message) {

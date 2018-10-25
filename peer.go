@@ -22,6 +22,8 @@ var (
 		2: "GameServer",
 		3: "GateServer",
 		4: "LoginServer",
+		5: "BattleServer",
+		6: "GmServer",
 	}
 )
 
@@ -257,24 +259,13 @@ func (peer *ClientPeer) Start(ctx context.Context) {
 				rpmstart = now
 			}
 		}
-		if !peer.Proc.IsImmediate() {
-			peer.Proc.AddMessage(&Message{
-				Peer: peer,
-				Head: &MessageHead{
-					Length: int32(size),
-					ID:     int32(id),
-				},
-				MSG: data,
-			})
-		} else {
-			peer.Proc.ProcMessage(&Message{
-				Peer: peer,
-				Head: &MessageHead{
-					Length: int32(size),
-					ID:     int32(id),
-				},
-				MSG: data,
-			})
-		}
+		peer.Proc.AddMessage(&Message{
+			Peer: peer,
+			Head: &MessageHead{
+				Length: int32(size),
+				ID:     int32(id),
+			},
+			MSG: data,
+		})
 	}
 }
