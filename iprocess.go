@@ -69,15 +69,19 @@ type IProcessor interface {
 	SetTickFunc(uptime time.Duration, upcall ProcFunction)
 	//StartProcess 同步处理信息，只有调用了这个接口，处理器才会处理实际的信息，以及实际发送消息
 	StartProcess(ctx context.Context, wg *sync.WaitGroup, loopFun func(ProcessType, interface{}))
-	//MultStartProcess 并发处理信息，只有调用了这个接口，处理器才会处理实际的信息，以及实际发送消息 并发数量multSize <2 使用处理器num-1
-	MultStartProcess(ctx context.Context, wg *sync.WaitGroup, multSize int)
+	/*
+	   MultStartProcess 并发处理信息，只有调用了这个接口，处理器才会处理实际的信息，以及实际发送消息
+	   processor_mult_size:并发数量(当值<2 使用处理器num-1) processor_balance_type={0,2}：推荐=NumCPU()； processor_balance_type={1}：服务器id-->根据和自己连接的服务器数量+1、玩家数量-->推荐=NumCPU()
+	   processor_balance_type:并发处理负载类型 0：基于消息自动序列号平均负载(默认情况)；1：基于连接的唯一id进行负载(保证对应id的消息顺序执行，需要考虑动态新增服务器的情况，预留新增的数量processor_mult_size+X)；2：基于消息ID类型(消息号定义最好顺序使用，保证能够负载均衡) 算法：balanceChan[typeid%processor_mult_size]<-msg
+	*/
+	MultStartProcess(ctx context.Context, wg *sync.WaitGroup, processor_mult_size uint32, processor_balance_type uint32)
 	//TriggerEvent 触发事件
 	TriggerEvent(event *Event) bool
 	//AddMessage 添加处理消息
 	AddMessage(msg *Message) bool
 	//AddFunc 添加执行函数
 	AddFunc(funz ProcFunction) bool
-	//UnHandledHandler 通用消息处理器 在调用 StartProcess 或 MultStartProcess 之前调用起作用
+	//UnHandledHandler 通用消息处理器  在调用 StartProcess 或 MultStartProcess 之前调用起作用
 	UnHandledHandler(uhandle MsgCallback)
 	//IsClosed 处理器是否关闭
 	IsClosed() bool

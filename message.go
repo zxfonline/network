@@ -26,7 +26,8 @@ const (
 // MessageHead the message head length and id
 type MessageHead struct {
 	Length int32
-	ID     int32
+	//ID>0
+	ID int32
 }
 
 func NewMessage(uid uint64, peer *ClientPeer, body []byte) *Message {
@@ -42,7 +43,11 @@ func NewMessage(uid uint64, peer *ClientPeer, body []byte) *Message {
 }
 
 func LogRecvMsg(msg *Message, s proto.Message) {
-	golog.Debugf("user(%d) recv client msgid:%d,msg:%s.", msg.UID, msg.Head.ID, s)
+	if s != nil {
+		golog.Debugf("user(%d) handle msgid:%d,msg:%s.", msg.UID, msg.Head.ID, s)
+	} else {
+		golog.Debugf("user(%d) handle msgid:%d.", msg.UID, msg.Head.ID)
+	}
 }
 
 // Message 消息链

@@ -56,11 +56,13 @@ type Cipher interface {
 	Decrypt(data []byte) []byte
 }
 
+var idPool uint64
 func NewClientPeer(logger *golog.Logger, conn net.Conn, proc IProcessor, senderSize int32, sendfullClose bool) *ClientPeer {
 	return &ClientPeer{
 		Logger:        logger,
 		conn:          conn,
 		Proc:          proc,
+		UID:           atomic.AddUint64(&idPool, 1),
 		sender:        NewSender(logger, conn, senderSize, sendfullClose),
 		closed:        chanutil.NewDoneChan(),
 		max_recv_size: MaxMessageLength,
@@ -71,6 +73,8 @@ type ClientPeer struct {
 	Logger *golog.Logger
 	conn   net.Conn
 	Proc   IProcessor
+	//连接id的唯一值标识，读取消息后赋值给消息UID，用于消息处理器的负载均衡
+	UID    uint64
 	sender *Sender
 	Flag   FlagType
 	done   uint32
@@ -266,6 +270,7 @@ func (peer *ClientPeer) Start(ctx context.Context) {
 				ID:     int32(id),
 			},
 			MSG: data,
+			UID: peer.UID,
 		})
 	}
 }

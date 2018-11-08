@@ -34,18 +34,18 @@ type Processor struct {
 }
 
 // NewProcessor 新建处理器，包含初始化操作
-func NewProcessor(logger *golog.Logger) IProcessor {
+func NewProcessor(msgChanSize, eventChanSize, funcChanSize int, logger *golog.Logger) IProcessor {
 	now := timefix.CurrentTime()
 	nextTime := timefix.NextMidnight(now, 1)
-	return NewProcessorWithLoopTime(logger, nextTime.Sub(now))
+	return NewProcessorWithLoopTime(logger, nextTime.Sub(now), msgChanSize, eventChanSize, funcChanSize)
 }
 
 // NewProcessorWithLoopTime 指定定时器
-func NewProcessorWithLoopTime(logger *golog.Logger, time time.Duration) IProcessor {
+func NewProcessorWithLoopTime(logger *golog.Logger, time time.Duration, msgChanSize, eventChanSize, funcChanSize int) IProcessor {
 	p := &Processor{
-		messageChan:   make(chan *Message, 1000),
-		eventChan:     make(chan *Event, 1000),
-		funcChan:      make(chan ProcFunction, 1000),
+		messageChan:   make(chan *Message, msgChanSize),
+		eventChan:     make(chan *Event, eventChanSize),
+		funcChan:      make(chan ProcFunction, funcChanSize),
 		eventCallback: make(map[int32]EventCallback),
 		callbackMap:   make(map[int32]MsgCallback),
 		loopTime:      time,
@@ -77,7 +77,12 @@ func (p *Processor) GetCallbackIds() []int32 {
 //AddCallback 设置回调
 func (p *Processor) AddCallback(id int32, callback MsgCallback) {
 	if id != 0 {
+		if _, ok := p.callbackMap[id]; ok {
+			p.Logger.Warnf("replace callback function,id:%d.", id)
+		}
 		p.callbackMap[id] = callback
+	} else {
+		p.Logger.Warnln("regist invalid callback function.")
 	}
 }
 
@@ -186,7 +191,7 @@ func (p *Processor) UnHandledHandler(handle MsgCallback) {
 	p.unHandledHandler = handle
 }
 
-// StartProcess 开始处理信息，只有调用了这个接口，处理器才会处理实际的信息，以及实际发送消息
+// StartProcess 同步处理信息，只有调用了这个接口，处理器才会处理实际的信息，以及实际发送消息
 func (p *Processor) StartProcess(ctx context.Context, wg *sync.WaitGroup, loopFun func(ProcessType, interface{})) {
 	wg.Add(1)
 	defer func() {
@@ -236,13 +241,17 @@ func (p *Processor) StartProcess(ctx context.Context, wg *sync.WaitGroup, loopFu
 	}
 }
 
-//MultStartProcess 并发处理信息，只有调用了这个接口，处理器才会处理实际的信息，以及实际发送消息 并发数量multSize <2 使用处理器num-1
-func (p *Processor) MultStartProcess(ctx context.Context, wg *sync.WaitGroup, multSize int) {
-	if multSize < 2 {
-		multSize = runtime.NumCPU() - 1
+/*
+MultStartProcess 并发处理信息，只有调用了这个接口，处理器才会处理实际的信息，以及实际发送消息
+processor_mult_size:并发数量(当值<2 使用处理器num-1) processor_balance_type={0,2}：推荐=NumCPU()； processor_balance_type={1}：服务器id-->根据和自己连接的服务器数量+1、玩家数量-->推荐=NumCPU()
+processor_balance_type:并发处理负载类型 0：基于消息自动序列号平均负载(默认情况)；1：基于连接的唯一id进行负载(保证对应id的消息顺序执行，需要考虑动态新增服务器的情况，预留新增的数量processor_mult_size+X)；2：基于消息ID类型(消息号定义最好顺序使用，保证能够负载均衡) 算法：balanceChan[typeid%processor_mult_size]<-msg
+*/
+func (p *Processor) MultStartProcess(ctx context.Context, wg *sync.WaitGroup, processor_mult_size uint32, processor_balance_type uint32) {
+	if processor_mult_size < 2 {
+		processor_mult_size = uint32(runtime.NumCPU() - 1)
 	}
-	if multSize < 2 {
-		multSize = 2
+	if processor_mult_size < 2 {
+		processor_mult_size = 2
 	}
 	wg.Add(1)
 	defer func() {
@@ -253,14 +262,14 @@ func (p *Processor) MultStartProcess(ctx context.Context, wg *sync.WaitGroup, mu
 		wg.Done()
 		p.Logger.Infof("mult processor is stoped.")
 	}()
-	p.Logger.Infof("mult processor is starting.")
+	p.Logger.Infof("mult processor is starting(multSize:%d,balanceType:%d).", processor_mult_size, processor_balance_type)
 
 	proxyTrace := trace.TraceStart("Goroutine", "MultProcessor", false)
 	defer trace.TraceFinish(proxyTrace)
 
-	balanceChanArray := make([]chan *Message, multSize)
-	for i := 0; i < multSize; i++ {
-		balanceChanArray[i] = make(chan *Message, 500)
+	balanceChanArray := make([]chan *Message, processor_mult_size)
+	for i := uint32(0); i < processor_mult_size; i++ {
+		balanceChanArray[i] = make(chan *Message, 256)
 	}
 	waitD := chanutil.NewDoneChan()
 	go func() {
@@ -275,10 +284,10 @@ func (p *Processor) MultStartProcess(ctx context.Context, wg *sync.WaitGroup, mu
 			}
 		}
 	}()
-	for i := 0; i < multSize; i++ {
+	for i := uint32(0); i < processor_mult_size; i++ {
 		go p.balanceProcess(wg, waitD, balanceChanArray[i])
 	}
-	mid := 0
+	var mid uint32
 	tick := time.Tick(p.loopTime)
 	for {
 		select {
@@ -287,7 +296,14 @@ func (p *Processor) MultStartProcess(ctx context.Context, wg *sync.WaitGroup, mu
 		case <-ctx.Done():
 			return
 		case msg := <-p.messageChan: //并发处理请求消息，其他类型还是在for中执行
-			balanceChanArray[mid%multSize] <- msg
+			switch processor_balance_type {
+			case 2: //基于消息ID类型进行负载
+				balanceChanArray[uint32(msg.Head.ID)%processor_mult_size] <- msg
+			case 1: //基于连接的唯一id进行负载(保证对应id的消息顺序执行)
+				balanceChanArray[msg.UID%uint64(processor_mult_size)] <- msg
+			default: //0：基于自动序列号进行负载
+				balanceChanArray[mid%processor_mult_size] <- msg
+			}
 			mid++
 		case event := <-p.eventChan:
 			if cb, ok := p.eventCallback[event.ID]; ok {
