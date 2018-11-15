@@ -87,4 +87,6 @@ type IProcessor interface {
 	IsClosed() bool
 	//Close 处理器关闭
 	Close()
+	//日志处理器
+	GetLogger() *golog.Logger
 }

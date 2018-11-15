@@ -55,6 +55,11 @@ func NewProcessorWithLoopTime(logger *golog.Logger, time time.Duration, msgChanS
 	return p
 }
 
+//GetLogger 获取日志处理器
+func (p *Processor) GetLogger() *golog.Logger {
+	return p.Logger
+}
+
 //IsClosed 处理器是否关闭
 func (p *Processor) IsClosed() bool {
 	return p.done.R().Done()
