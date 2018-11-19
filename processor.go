@@ -197,7 +197,7 @@ func (p *Processor) UnHandledHandler(handle MsgCallback) {
 }
 
 // StartProcess 同步处理信息，只有调用了这个接口，处理器才会处理实际的信息，以及实际发送消息
-func (p *Processor) StartProcess(ctx context.Context, wg *sync.WaitGroup, loopFun func(ProcessType, interface{})) {
+func (p *Processor) StartProcess(ctx context.Context, wg *sync.WaitGroup, loopFun func(ProcessType, interface{}), name string) {
 	wg.Add(1)
 	defer func() {
 		if x := recover(); x != nil {
@@ -209,6 +209,9 @@ func (p *Processor) StartProcess(ctx context.Context, wg *sync.WaitGroup, loopFu
 	}()
 	p.Logger.Infof("sync processor is starting.")
 
+	if len(name) > 0 {
+		expvar.RegistChanMonitor(fmt.Sprintf("chan%s", name), p.messageChan)
+	}
 	proxyTrace := trace.TraceStart("Goroutine", "SyncProcessor", false)
 	defer trace.TraceFinish(proxyTrace)
 	tick := time.Tick(p.loopTime)
@@ -251,7 +254,7 @@ MultStartProcess 并发处理信息，只有调用了这个接口，处理器才
 processor_mult_size:并发数量(当值<2 使用处理器num-1) processor_balance_type={0,2}：推荐=NumCPU()； processor_balance_type={1}：服务器id-->根据和自己连接的服务器数量+1、玩家数量-->推荐=NumCPU()
 processor_balance_type:并发处理负载类型 0：基于消息自动序列号平均负载(默认情况)；1：基于连接的唯一id进行负载(保证对应id的消息顺序执行，需要考虑动态新增服务器的情况，预留新增的数量processor_mult_size+X)；2：基于消息ID类型(消息号定义最好顺序使用，保证能够负载均衡) 算法：balanceChan[typeid%processor_mult_size]<-msg
 */
-func (p *Processor) MultStartProcess(ctx context.Context, wg *sync.WaitGroup, processor_mult_size uint32, processor_balance_type uint32) {
+func (p *Processor) MultStartProcess(ctx context.Context, wg *sync.WaitGroup, processor_mult_size uint32, processor_balance_type uint32, name string) {
 	if processor_mult_size < 2 {
 		processor_mult_size = uint32(runtime.NumCPU() - 1)
 	}
@@ -269,6 +272,9 @@ func (p *Processor) MultStartProcess(ctx context.Context, wg *sync.WaitGroup, pr
 	}()
 	p.Logger.Infof("mult processor is starting(multSize:%d,balanceType:%d).", processor_mult_size, processor_balance_type)
 
+	if len(name) > 0 {
+		expvar.RegistChanMonitor(fmt.Sprintf("chan%s", name), p.messageChan)
+	}
 	proxyTrace := trace.TraceStart("Goroutine", "MultProcessor", false)
 	defer trace.TraceFinish(proxyTrace)
 
