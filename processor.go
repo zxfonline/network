@@ -16,11 +16,16 @@ import (
 	"github.com/zxfonline/trace"
 )
 
+//处理器任务消息
+type pstask struct {
+	Type ProcessType
+	Task interface{}
+}
+
 // Processor 消息处理器
 type Processor struct {
-	messageChan      chan *Message
+	messageChan      chan pstask
 	eventChan        chan *Event
-	funcChan         chan ProcFunction
 	callbackMap      map[int32]MsgCallback
 	unHandledHandler MsgCallback //未注册的消息处理
 	eventCallback    map[int32]EventCallback
@@ -34,18 +39,17 @@ type Processor struct {
 }
 
 // NewProcessor 新建处理器，包含初始化操作
-func NewProcessor(msgChanSize, eventChanSize, funcChanSize int, logger *golog.Logger) IProcessor {
+func NewProcessor(msgChanSize, eventChanSize int, logger *golog.Logger) IProcessor {
 	now := timefix.CurrentTime()
 	nextTime := timefix.NextMidnight(now, 1)
-	return NewProcessorWithLoopTime(logger, nextTime.Sub(now), msgChanSize, eventChanSize, funcChanSize)
+	return NewProcessorWithLoopTime(logger, nextTime.Sub(now), msgChanSize, eventChanSize)
 }
 
 // NewProcessorWithLoopTime 指定定时器
-func NewProcessorWithLoopTime(logger *golog.Logger, time time.Duration, msgChanSize, eventChanSize, funcChanSize int) IProcessor {
+func NewProcessorWithLoopTime(logger *golog.Logger, time time.Duration, msgChanSize, eventChanSize int) IProcessor {
 	p := &Processor{
-		messageChan:   make(chan *Message, msgChanSize),
+		messageChan:   make(chan pstask, msgChanSize),
 		eventChan:     make(chan *Event, eventChanSize),
-		funcChan:      make(chan ProcFunction, funcChanSize),
 		eventCallback: make(map[int32]EventCallback),
 		callbackMap:   make(map[int32]MsgCallback),
 		loopTime:      time,
@@ -116,9 +120,9 @@ func (p *Processor) AddFunc(funz ProcFunction) bool {
 		select {
 		case <-p.done:
 			return false
-		case p.funcChan <- funz:
-			if wait := len(p.funcChan); wait > cap(p.funcChan)/10*5 && wait%100 == 0 {
-				p.Logger.Warnf("processor funcChan process,waitchan:%d/%d.", wait, cap(p.funcChan))
+		case p.messageChan <- pstask{Type: ProcessTypeFunc, Task: funz}:
+			if wait := len(p.messageChan); wait > cap(p.messageChan)/10*5 && wait%100 == 0 {
+				p.Logger.Warnf("processor message process,waitchan:%d/%d.", wait, cap(p.messageChan))
 			}
 			return true
 		}
@@ -152,9 +156,9 @@ func (p *Processor) AddMessage(msg *Message) bool {
 		select {
 		case <-p.done:
 			return false
-		case p.messageChan <- msg:
+		case p.messageChan <- pstask{Type: ProcessTypeMessage, Task: msg}:
 			if wait := len(p.messageChan); wait > cap(p.messageChan)/10*5 && wait%100 == 0 {
-				p.Logger.Warnf("processor messageChan process,waitchan:%d/%d.", wait, cap(p.messageChan))
+				p.Logger.Warnf("processor message process,waitchan:%d/%d.", wait, cap(p.messageChan))
 			}
 			return true
 		}
@@ -221,11 +225,15 @@ func (p *Processor) StartProcess(ctx context.Context, wg *sync.WaitGroup, loopFu
 			return
 		case <-ctx.Done():
 			return
-		case msg := <-p.messageChan:
+		case pt := <-p.messageChan:
 			if loopFun != nil {
-				loopFun(ProcessTypeMessage, msg)
+				loopFun(pt.Type, pt.Task)
 			}
-			p.procMessage(msg)
+			if pt.Type == ProcessTypeMessage {
+				p.procMessage(pt.Task.(*Message))
+			} else if pt.Type == ProcessTypeFunc {
+				recoverFunc(p, pt.Task.(ProcFunction))
+			}
 		case event := <-p.eventChan:
 			if loopFun != nil {
 				loopFun(ProcessTypeEvent, event)
@@ -233,11 +241,6 @@ func (p *Processor) StartProcess(ctx context.Context, wg *sync.WaitGroup, loopFu
 			if cb, ok := p.eventCallback[event.ID]; ok {
 				recoverEventCallback(p, cb, ctx, event)
 			}
-		case f := <-p.funcChan:
-			if loopFun != nil {
-				loopFun(ProcessTypeFunc, f)
-			}
-			recoverFunc(p, f)
 		case <-tick:
 			if p.updateCallback != nil {
 				if loopFun != nil {
@@ -306,22 +309,25 @@ func (p *Processor) MultStartProcess(ctx context.Context, wg *sync.WaitGroup, pr
 			return
 		case <-ctx.Done():
 			return
-		case msg := <-p.messageChan: //并发处理请求消息，其他类型还是在for中执行
-			switch processor_balance_type {
-			case 2: //基于消息ID类型进行负载
-				balanceChanArray[uint32(msg.Head.ID)%processor_mult_size] <- msg
-			case 1: //基于连接的唯一id进行负载(保证对应id的消息顺序执行)
-				balanceChanArray[msg.UID%uint64(processor_mult_size)] <- msg
-			default: //0：基于自动序列号进行负载
-				balanceChanArray[mid%processor_mult_size] <- msg
+		case pt := <-p.messageChan: //并发处理请求消息，其他类型还是在for中执行
+			if pt.Type == ProcessTypeMessage {
+				msg := pt.Task.(*Message)
+				switch processor_balance_type {
+				case 2: //基于消息ID类型进行负载
+					balanceChanArray[uint32(msg.Head.ID)%processor_mult_size] <- msg
+				case 1: //基于连接的唯一id进行负载(保证对应id的消息顺序执行)
+					balanceChanArray[msg.UID%uint64(processor_mult_size)] <- msg
+				default: //0：基于自动序列号进行负载
+					balanceChanArray[mid%processor_mult_size] <- msg
+				}
+				mid++
+			} else if pt.Type == ProcessTypeFunc {
+				recoverFunc(p, pt.Task.(ProcFunction))
 			}
-			mid++
 		case event := <-p.eventChan:
 			if cb, ok := p.eventCallback[event.ID]; ok {
 				recoverEventCallback(p, cb, ctx, event)
 			}
-		case f := <-p.funcChan:
-			recoverFunc(p, f)
 		case <-tick:
 			if p.updateCallback != nil {
 				recoverFunc(p, p.updateCallback)
