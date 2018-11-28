@@ -29,17 +29,17 @@ func (s *Sender) Send(data []byte) bool {
 			return false
 		case s.pending <- data:
 			if wait := len(s.pending); wait > cap(s.pending)/10*5 && wait%10 == 0 {
-				s.Logger.Warnf("sender send process,waitchan:%d/%d,remote %s.", wait, cap(s.pending), s.conn.RemoteAddr())
+				s.Logger.Warnf("sender send process,waitchan:%d/%d,remote %s msgid %d..", wait, cap(s.pending), s.conn.RemoteAddr(), ReadHead(data).ID)
 			}
 			return true
 		default:
-			s.Logger.Warnf("sender overflow,close conn,pending %d remote %s.", len(s.pending), s.conn.RemoteAddr())
+			s.Logger.Warnf("sender overflow,close conn,pending %d remote %s msgid %d.", len(s.pending), s.conn.RemoteAddr(), ReadHead(data).ID)
 			s.Close()
 			return false
 		}
 	} else {
 		if wait := len(s.pending); wait > cap(s.pending)/10*5 && wait%10 == 0 {
-			s.Logger.Warnf("sender send process,waitchan:%d/%d,remote %s.", wait, cap(s.pending), s.conn.RemoteAddr())
+			s.Logger.Warnf("sender send process,waitchan:%d/%d,remote %s msgid %d.", wait, cap(s.pending), s.conn.RemoteAddr(), ReadHead(data).ID)
 		}
 		//阻塞发送，直到管道关闭
 		select {
