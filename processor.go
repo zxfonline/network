@@ -64,8 +64,8 @@ func (p *Processor) GetLogger() *golog.Logger {
 	return p.Logger
 }
 
-//IsClosed 处理器是否关闭
-func (p *Processor) IsClosed() bool {
+//Closed 处理器是否关闭
+func (p *Processor) Closed() bool {
 	return p.done.R().Done()
 }
 
@@ -170,7 +170,7 @@ func (p *Processor) procMessage(msg *Message) {
 			p.Logger.Errorf("recover error:%v.", x)
 		}
 	}()
-	if msg.Peer.IsClosed() {
+	if msg.Peer.Closed() {
 		p.Logger.Debugf("conn closed,processor ignore cached message,uid:%d,msg:%d.", msg.UID, msg.Head.ID)
 		return
 	}

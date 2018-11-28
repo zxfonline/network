@@ -2,6 +2,7 @@ package network
 
 import (
 	"context"
+	"errors"
 	"net"
 
 	"github.com/zxfonline/golog"
@@ -52,7 +53,13 @@ func (s *Sender) Send(data []byte) bool {
 }
 
 func (s *Sender) SyncSend(data []byte) error {
-	return s.rawSend(data)
+	select {
+	case <-s.done:
+		s.Logger.Warnf("sender close: %p %s,send msg false.", s, s.conn.RemoteAddr())
+		return errors.New("send to closed conn")
+	default:
+		return s.rawSend(data)
+	}
 }
 
 func (s *Sender) PendingCnt() int {
@@ -86,8 +93,14 @@ func (s *Sender) rawSend(data []byte) (err error) {
 	return
 }
 
+//Close 连接关闭
 func (s *Sender) Close() {
 	s.done.SetDone()
+}
+
+//Closed 连接是否已经关闭
+func (s *Sender) Closed() bool {
+	return s.done.R().Done()
 }
 
 func NewSender(logger *golog.Logger, conn net.Conn, psize int32, sendfullClose bool) *Sender {

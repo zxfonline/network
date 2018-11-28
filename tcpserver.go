@@ -67,7 +67,7 @@ func (s *Server) BlockAccept(logger *golog.Logger, proc IProcessor, senderSize i
 	var tempDelay time.Duration
 	for {
 		if err = s.BlockAcceptOne(logger, proc, senderSize, sendfullClose); err != nil {
-			if !proc.IsClosed() {
+			if !proc.Closed() {
 				s.Logger.Warnf("tcp accept error :%s", err.Error())
 			}
 			if proxyTrace != nil {

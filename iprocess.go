@@ -83,8 +83,8 @@ type IProcessor interface {
 	AddFunc(funz ProcFunction) bool
 	//UnHandledHandler 通用消息处理器  在调用 StartProcess 或 MultStartProcess 之前调用起作用
 	UnHandledHandler(uhandle MsgCallback)
-	//IsClosed 处理器是否关闭
-	IsClosed() bool
+	//Closed 处理器是否关闭
+	Closed() bool
 	//Close 处理器关闭
 	Close()
 	//日志处理器

@@ -11,8 +11,6 @@ import (
 	"github.com/zxfonline/golog"
 
 	"net"
-
-	"github.com/zxfonline/chanutil"
 )
 
 var (
@@ -57,6 +55,7 @@ type Cipher interface {
 }
 
 var idPool uint64
+
 func NewClientPeer(logger *golog.Logger, conn net.Conn, proc IProcessor, senderSize int32, sendfullClose bool) *ClientPeer {
 	return &ClientPeer{
 		Logger:        logger,
@@ -64,7 +63,6 @@ func NewClientPeer(logger *golog.Logger, conn net.Conn, proc IProcessor, senderS
 		Proc:          proc,
 		UID:           atomic.AddUint64(&idPool, 1),
 		sender:        NewSender(logger, conn, senderSize, sendfullClose),
-		closed:        chanutil.NewDoneChan(),
 		max_recv_size: MaxMessageLength,
 	}
 }
@@ -78,7 +76,6 @@ type ClientPeer struct {
 	sender *Sender
 	Flag   FlagType
 	done   uint32
-	closed chanutil.DoneChan
 
 	max_recv_size int32
 	read_delay    time.Duration
@@ -120,15 +117,14 @@ func (peer *ClientPeer) NetIp() string {
 }
 
 //连接是否已经关闭
-func (peer *ClientPeer) IsClosed() bool {
-	return peer.closed.R().Done()
+func (peer *ClientPeer) Closed() bool {
+	return peer.sender.Closed()
 }
 
 func (peer *ClientPeer) Close() {
-	if peer.closed.R().Done() {
+	if peer.Closed() {
 		return
 	}
-	peer.closed.SetDone()
 	peer.sender.Close()
 	peer.conn.Close()
 }
@@ -223,6 +219,9 @@ func (peer *ClientPeer) Start(ctx context.Context) {
 			// if err != io.EOF {
 			// 	peer.Logger.Warnf("error receiving header,conn:%s bytes:%d size:%d err:%v", peer.NetIp(), n, HEAD_SIZE, err)
 			// }
+			return
+		}
+		if peer.Closed() {
 			return
 		}
 		size := int32(ServerEndian.Uint32(header[:4]))
