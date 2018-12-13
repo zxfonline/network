@@ -316,7 +316,7 @@ func (p *Processor) MultStartProcess(ctx context.Context, wg *sync.WaitGroup, pr
 				case 2: //基于消息ID类型进行负载
 					balanceChanArray[uint32(msg.Head.ID)%processor_mult_size] <- msg
 				case 1: //基于连接的唯一id进行负载(保证对应id的消息顺序执行)
-					balanceChanArray[msg.UID%uint64(processor_mult_size)] <- msg
+					balanceChanArray[msg.UID%int64(processor_mult_size)] <- msg
 				default: //0：基于自动序列号进行负载
 					balanceChanArray[mid%processor_mult_size] <- msg
 				}

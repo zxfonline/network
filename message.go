@@ -30,7 +30,7 @@ type MessageHead struct {
 	ID int32
 }
 
-func NewMessage(uid uint64, peer *ClientPeer, body []byte) *Message {
+func NewMessage(uid int64, peer *ClientPeer, body []byte) *Message {
 	msg := &Message{
 		UID:  uid,
 		Peer: peer,
@@ -55,7 +55,7 @@ type Message struct {
 	Head *MessageHead
 	MSG  []byte
 
-	UID  uint64
+	UID  int64
 	Peer *ClientPeer
 }
 
